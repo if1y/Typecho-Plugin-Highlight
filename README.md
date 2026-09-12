@@ -6,21 +6,13 @@
 
 1. 上传仓库代码到 `/usr/plugins/` 目录，命名为 `Highlight`
 2. 进入 Typecho 后台，启用插件
-3. 在插件设置中选择引擎和主题
+3. 在插件设置中选择主题
 
 ## 配置
 
-### 引擎选择
+### 主题选择
 
-| 引擎 | 优点 | 缺点 | CSS 样式 |
-|------|------|------|----------|
-| **highlight.php** | 速度快，兼容性好 | 精度较低 | 自动加载 ✅ |
-| **Phiki** | 精度高，支持嵌套 | 相对较慢 | 内联样式 ✅ |
-
-**说明**：
-- highlight.php 引擎会自动在页面 `<head>` 中注入对应主题的 CSS
-- Phiki 引擎使用内联样式，无需外部 CSS 文件
-- 主题切换即时生效，无需任何手动操作
+可在插件设置中选择主题，对应的 CSS 会自动注入到页面 `<head>` 中，切换即时生效。
 
 ## 评论高亮
 
@@ -32,18 +24,27 @@
    <pre class="" style=""><code class="" style=""><span class="" style="">
    ```
 
+## 目录结构
+
+```
+Highlight/
+├── Plugin.php           插件入口：配置面板、钩子注册、内容高亮处理
+├── Engine.php           highlight.php 高亮引擎（单例）
+├── assets/
+│   ├── highlight.css    行号、复制按钮等前端样式
+│   └── highlight.js     复制按钮与动态代码块处理
+└── vendor/              highlight.php 库（Autoloader、Highlighter 等）
+    ├── languages/       语言定义文件
+    └── themes/          主题 CSS 文件
+```
+
 ## 引用库
 
-### highlight.php
+highlight.php
 
 - **仓库**: https://github.com/scrivo/highlight.php
 - **版本**: 9.18.1.10
 - **许可**: BSD-3-Clause
-
-### Phiki
-
-- **仓库**: https://github.com/tapio475/phiki
-- **许可**: MIT
 
 ## 许可证
 

@@ -33,12 +33,7 @@ class Plugin implements PluginInterface
         // 自动输出 CSS 到 <head>
         \Typecho\Plugin::factory('Widget_Archive')->header = __CLASS__ . '::header';
 
-        $message = '插件已激活，代码高亮功能已启用。';
-        $message .= '<br><br><strong>默认引擎：</strong>highlight.php (hljs)';
-        $message .= '<br>可在插件设置中切换到 Phiki 引擎';
-        $message .= '<br><br><strong>重要提示：</strong>评论高亮需要在后台设置允许 <code>class</code> 和 <code>style</code> 属性：';
-        $message .= '<br>进入 <a href="' . Options::alloc()->adminUrl . 'options-discussion.php">设置 → 评论</a>，';
-        $message .= '将"评论允许的 HTML 标签"修改为：<code>&lt;pre class="" style=""&gt;&lt;code class="" style=""&gt;&lt;span class="" style=""&gt;</code>';
+        $message = '插件已激活，代码高亮功能已启用';
 
         return $message;
     }
@@ -57,19 +52,6 @@ class Plugin implements PluginInterface
      */
     public static function config(Form $form)
     {
-        // 引擎选择
-        $engine = new Select(
-            'engine',
-            [
-                'highlight.php' => 'highlight.php (兼容 highlight.js CSS)',
-                'phiki' => 'Phiki (TextMate 语法，更高精度)'
-            ],
-            'highlight.php',
-            '高亮引擎',
-            'highlight.php: 速度快，兼容 highlight.js 主题<br>Phiki: 精度更高，支持嵌套语法，内联样式'
-        );
-        $form->addInput($engine);
-
         // highlight.php 主题选择
         $hljsThemes = [
             'github' => 'GitHub',
@@ -91,21 +73,10 @@ class Plugin implements PluginInterface
             'hljsTheme',
             $hljsThemes,
             'github',
-            'highlight.php 主题',
-            '仅在使用 highlight.php 引擎时生效，需要在主题中引入对应的 CSS 文件'
+            'highlight.js 主题',
+            '主题 CSS 会自动注入到页面 <head> 中'
         );
         $form->addInput($hljsTheme);
-
-        // Phiki 主题选择
-        $phikiThemes = self::getPhikiThemes();
-        $phikiTheme = new Select(
-            'phikiTheme',
-            $phikiThemes,
-            'github-light',
-            'Phiki 主题',
-            '仅在使用 Phiki 引擎时生效'
-        );
-        $form->addInput($phikiTheme);
 
         // 行号显示
         $showLineNumbers = new Checkbox(
@@ -126,29 +97,6 @@ class Plugin implements PluginInterface
             '在代码块右上角添加复制按钮'
         );
         $form->addInput($showCopyButton);
-    }
-
-    /**
-     * 获取所有可用的 Phiki 主题
-     */
-    private static function getPhikiThemes()
-    {
-        $themes = [];
-        $themeDir = __DIR__ . '/vendor/Phiki/resources/themes/';
-
-        if (is_dir($themeDir)) {
-            foreach (glob($themeDir . '*.json') as $file) {
-                $name = basename($file, '.json');
-                // 转换为可读标题
-                $label = str_replace(['-', '_'], ' ', $name);
-                $label = ucwords($label);
-                $themes[$name] = $label;
-            }
-        }
-
-        // 按名称排序
-        asort($themes);
-        return $themes;
     }
 
     /**
@@ -178,26 +126,20 @@ class Plugin implements PluginInterface
     }
 
     /**
-     * 获取当前引擎类型的 CSS 文件 URL
-     * @return string|null CSS 文件 URL，如果使用 Phiki 引擎则返回 null
+     * 获取当前主题的 CSS 文件 URL
+     * @return string CSS 文件 URL
      */
     public static function getStylesheetUrl()
     {
         $options = Options::alloc();
         $pluginConfig = $options->plugin('Highlight');
-        $engine = isset($pluginConfig->engine) ? $pluginConfig->engine : 'highlight.php';
-
-        // Phiki 使用内联样式，不需要 CSS
-        if ($engine === 'phiki') {
-            return null;
-        }
 
         // 获取当前主题
         $theme = isset($pluginConfig->hljsTheme) ? $pluginConfig->hljsTheme : 'github';
 
         // 返回 CSS 文件 URL
         $options = Options::alloc();
-        $pluginUrl = $options->pluginUrl . '/Highlight/vendor/Highlight/themes/' . $theme . '.css';
+        $pluginUrl = $options->pluginUrl . '/Highlight/vendor/themes/' . $theme . '.css';
 
         return $pluginUrl;
     }
@@ -235,22 +177,10 @@ class Plugin implements PluginInterface
      */
     private static function getEngine()
     {
-        require_once __DIR__ . '/Engine/EngineFactory.php';
-        require_once __DIR__ . '/Engine/EngineInterface.php';
-        require_once __DIR__ . '/Engine/HighlightPhpEngine.php';
-        require_once __DIR__ . '/Engine/PhikiEngine.php';
+        require_once __DIR__ . '/Engine.php';
 
-        // 读取插件配置
-        $options = Options::alloc();
-        $pluginConfig = $options->plugin('Highlight');
-
-        $config = [
-            'engine' => isset($pluginConfig->engine) ? $pluginConfig->engine : 'highlight.php',
-            'phiki_theme' => isset($pluginConfig->phikiTheme) ? $pluginConfig->phikiTheme : 'github-light',
-        ];
-
-        Engine\EngineFactory::setConfig($config);
-        $engine = Engine\EngineFactory::getEngine();
+        $engine = Engine::getInstance();
+        $engine->init();
 
         return $engine;
     }
@@ -286,8 +216,7 @@ class Plugin implements PluginInterface
                 // 幂等性：已高亮则跳过
                 $classAttr = $code->getAttribute('class');
                 if ($engine->isHighlighted($classAttr) ||
-                    strpos($classAttr, 'hljs') !== false ||
-                    strpos($classAttr, 'phiki') !== false) {
+                    strpos($classAttr, 'hljs') !== false) {
                     return $preTag;
                 }
 
@@ -303,59 +232,30 @@ class Plugin implements PluginInterface
                 $pluginConfig = $options->plugin('Highlight');
                 $showLineNumbers = isset($pluginConfig->showLineNumbers) && in_array('1', (array)$pluginConfig->showLineNumbers);
 
-                // 检查是否是 Phiki 引擎（返回完整的 <pre> 结构）
-                if (strpos($highlightedHtml, '<pre') === 0) {
-                    // Phiki 返回完整结构
-                    if ($showLineNumbers) {
-                        // 需要添加行号，处理 HTML
-                        [$processedHtml, $lineNumWidth] = self::addLineNumbersToHtml($highlightedHtml);
-                        $preFragment = $dom->createDocumentFragment();
-                        $preFragment->appendXML($processedHtml);
-                        $newPre = $preFragment->firstChild;
-
-                        // 添加行号类到 code 元素，并按最大行号位数固定行号栏宽度
-                        $code = $newPre->getElementsByTagName('code')->item(0);
-                        if ($code) {
-                            $class = $code->getAttribute('class');
-                            $class = trim($class . ' code-block-extension-code-show-num');
-                            $code->setAttribute('class', $class);
-                            $style = $code->getAttribute('style');
-                            $style .= ($style !== '' && substr(rtrim($style), -1) !== ';' ? ';' : '')
-                                . self::setLineNumberWidthStyle($lineNumWidth);
-                            $code->setAttribute('style', trim($style));
-                        }
-
-                        $result = $dom->saveHTML($newPre);
-                    } else {
-                        // 不需要添加行号，直接使用原始 HTML（避免 DOM 处理破坏样式）
-                        $result = $highlightedHtml;
-                    }
-                } else {
-                    // highlight.php 只返回 code 内容，需要构建结构
-                    $newPre = $dom->createElement('pre');
-                    $newCode = $dom->createElement('code');
-                    $classes = $engine->getCodeClass($language);
-                    if ($showLineNumbers) {
-                        $classes = trim($classes . ' code-block-extension-code-show-num');
-                    }
-                    $newCode->setAttribute('class', $classes);
-
-                    // 添加行号处理
-                    if ($showLineNumbers) {
-                        [$processedHtml, $lineNumWidth] = self::addLineNumbersToHtmlForHighlight($highlightedHtml);
-                        // 按最大行号位数固定行号栏宽度，避免多位数行号导致代码位移
-                        $newCode->setAttribute('style', self::setLineNumberWidthStyle($lineNumWidth));
-                    } else {
-                        $processedHtml = $highlightedHtml;
-                    }
-
-                    $codeFragment = $dom->createDocumentFragment();
-                    $codeFragment->appendXML($processedHtml);
-                    $newCode->appendChild($codeFragment);
-                    $newPre->appendChild($newCode);
-
-                    $result = $dom->saveHTML($newPre);
+                // highlight.php 只返回 code 内容，需要构建结构
+                $newPre = $dom->createElement('pre');
+                $newCode = $dom->createElement('code');
+                $classes = $engine->getCodeClass($language);
+                if ($showLineNumbers) {
+                    $classes = trim($classes . ' code-block-extension-code-show-num');
                 }
+                $newCode->setAttribute('class', $classes);
+
+                // 添加行号处理
+                if ($showLineNumbers) {
+                    [$processedHtml, $lineNumWidth] = self::addLineNumbersToHtmlForHighlight($highlightedHtml);
+                    // 按最大行号位数固定行号栏宽度，避免多位数行号导致代码位移
+                    $newCode->setAttribute('style', self::setLineNumberWidthStyle($lineNumWidth));
+                } else {
+                    $processedHtml = $highlightedHtml;
+                }
+
+                $codeFragment = $dom->createDocumentFragment();
+                $codeFragment->appendXML($processedHtml);
+                $newCode->appendChild($codeFragment);
+                $newPre->appendChild($newCode);
+
+                $result = $dom->saveHTML($newPre);
 
                 // 清理 XML 声明
                 return self::cleanHtml($result);
@@ -364,44 +264,6 @@ class Plugin implements PluginInterface
         );
 
         return $content;
-    }
-
-    /**
-     * 为高亮后的 HTML 添加行号
-     * @param string $html Phiki 引擎返回的高亮 HTML
-     * @return array [处理后的 HTML, 行号最大位数]
-     */
-    private static function addLineNumbersToHtml($html)
-    {
-        // Phiki 引擎：为 <span class="line"> 添加行号类
-        // 使用 DOM 方法处理更可靠
-        libxml_use_internal_errors(true);
-        $dom = new \DOMDocument();
-        $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-        libxml_clear_errors();
-
-        $xpath = new \DOMXPath($dom);
-        $lines = $xpath->query('//span[@class="line"]');
-
-        $lineNum = 1;
-        foreach ($lines as $line) {
-            $wrapper = $dom->createElement('span');
-            $wrapper->setAttribute('class', 'code-block-extension-code-line');
-            $wrapper->setAttribute('data-line-num', (string)$lineNum);
-
-            // 克隆 line 元素
-            $clonedLine = $line->cloneNode(true);
-            $wrapper->appendChild($clonedLine);
-
-            // 替换原 line 元素
-            $line->parentNode->replaceChild($wrapper, $line);
-
-            $lineNum++;
-        }
-
-        $result = $dom->saveHTML();
-        // 实际行数 = 计数器最终值 - 1
-        return [self::cleanHtml($result), strlen((string)max(1, $lineNum - 1))];
     }
 
     /**
