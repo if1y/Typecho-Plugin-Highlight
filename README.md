@@ -1,22 +1,10 @@
-# PS-Highlight
+# Typecho-Plugin-Highlight
 
-一个现代化的 Typecho 代码高亮插件，支持双引擎切换。
-
-## 特性
-
-- **双引擎支持**
-  - **highlight.php**: 基于 highlight.js，速度快，兼容性好
-  - **Phiki**: 基于 TextMate 语法，精度更高，支持嵌套语法，内联样式
-
-- **丰富的主题**
-  - highlight.php: 13+ 经典主题（GitHub, Monokai, Dracula等）
-  - Phiki: 60+ 现代主题（Catppuccin, Rose Pine, Tokyo Night等）
-
-- **开箱即用**
+基于 [MoXiaoXi233/PS-HighLight-Plugin](https://github.com/MoXiaoXi233/PS-HighLight-Plugin) 的 Typecho 代码高亮插件
 
 ## 安装
 
-1. 将 `PS-Highlight` 文件夹上传到 `/usr/plugins/` 目录
+1. 上传仓库代码到 `/usr/plugins/` 目录，命名为 `Highlight`
 2. 进入 Typecho 后台，启用插件
 3. 在插件设置中选择引擎和主题
 

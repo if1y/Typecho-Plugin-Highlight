@@ -1,6 +1,6 @@
 <?php
 
-namespace TypechoPlugin\PS_Highlight;
+namespace TypechoPlugin\Highlight;
 
 use Typecho\Plugin\PluginInterface;
 use Typecho\Widget\Helper\Form;
@@ -13,10 +13,10 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
 /**
  * Typecho 服务器端代码高亮插件，采用后端渲染的方案，前端友好
  *
- * @package PS_Highlight
- * @author MoXiify
+ * @package Highlight
+ * @author WannαFly
  * @version 1.0.0
- * @link https://www.moxiify.cn
+ * @link https://github.com/if1y/Typecho-Plugin-Highlight
  */
 class Plugin implements PluginInterface
 {
@@ -184,7 +184,7 @@ class Plugin implements PluginInterface
     public static function getStylesheetUrl()
     {
         $options = Options::alloc();
-        $pluginConfig = $options->plugin('PS_Highlight');
+        $pluginConfig = $options->plugin('Highlight');
         $engine = isset($pluginConfig->engine) ? $pluginConfig->engine : 'highlight.php';
 
         // Phiki 使用内联样式，不需要 CSS
@@ -197,7 +197,7 @@ class Plugin implements PluginInterface
 
         // 返回 CSS 文件 URL
         $options = Options::alloc();
-        $pluginUrl = $options->pluginUrl . '/PS_Highlight/vendor/Highlight/themes/' . $theme . '.css';
+        $pluginUrl = $options->pluginUrl . '/Highlight/vendor/Highlight/themes/' . $theme . '.css';
 
         return $pluginUrl;
     }
@@ -209,11 +209,11 @@ class Plugin implements PluginInterface
     public static function header()
     {
         $options = Options::alloc();
-        $pluginUrl = $options->pluginUrl . '/PS_Highlight';
-        $pluginConfig = $options->plugin('PS_Highlight');
+        $pluginUrl = $options->pluginUrl . '/Highlight';
+        $pluginConfig = $options->plugin('Highlight');
 
         // 输出插件样式
-        echo '<link rel="stylesheet" href="' . htmlspecialchars($pluginUrl) . '/assets/css/ps-highlight.css">' . "\n";
+        echo '<link rel="stylesheet" href="' . htmlspecialchars($pluginUrl) . '/assets/highlight.css">' . "\n";
 
         // 输出高亮引擎样式（仅 highlight.php 需要）
         $cssUrl = self::getStylesheetUrl();
@@ -224,10 +224,10 @@ class Plugin implements PluginInterface
         // 输出配置到 JavaScript
         $showCopyButton = isset($pluginConfig->showCopyButton) && in_array('1', (array)$pluginConfig->showCopyButton) ? 'true' : 'false';
 
-        echo '<script>window.PS_HIGHLIGHT_CONFIG = {showCopyButton:' . $showCopyButton . '};</script>' . "\n";
+        echo '<script>window.HIGHLIGHT_CONFIG = {showCopyButton:' . $showCopyButton . '};</script>' . "\n";
 
         // 输出 JavaScript 文件
-        echo '<script src="' . htmlspecialchars($pluginUrl) . '/assets/js/ps-highlight.js"></script>' . "\n";
+        echo '<script src="' . htmlspecialchars($pluginUrl) . '/assets/highlight.js"></script>' . "\n";
     }
 
     /**
@@ -242,7 +242,7 @@ class Plugin implements PluginInterface
 
         // 读取插件配置
         $options = Options::alloc();
-        $pluginConfig = $options->plugin('PS_Highlight');
+        $pluginConfig = $options->plugin('Highlight');
 
         $config = [
             'engine' => isset($pluginConfig->engine) ? $pluginConfig->engine : 'highlight.php',
@@ -300,7 +300,7 @@ class Plugin implements PluginInterface
 
                 // 获取插件配置
                 $options = Options::alloc();
-                $pluginConfig = $options->plugin('PS_Highlight');
+                $pluginConfig = $options->plugin('Highlight');
                 $showLineNumbers = isset($pluginConfig->showLineNumbers) && in_array('1', (array)$pluginConfig->showLineNumbers);
 
                 // 检查是否是 Phiki 引擎（返回完整的 <pre> 结构）
@@ -441,11 +441,11 @@ class Plugin implements PluginInterface
      * 9 变 10、99 变 100 时代码左边缘不会发生位移。
      *
      * @param int $digits 该代码块行号的最大位数
-     * @return string 形如 "--ps-line-num-width:2ch"
+     * @return string 形如 "--highlight-line-num-width:2ch"
      */
     private static function setLineNumberWidthStyle($digits)
     {
-        return '--ps-line-num-width:' . max(2, (int) $digits) . 'ch';
+        return '--highlight-line-num-width:' . max(2, (int) $digits) . 'ch';
     }
 
     /**

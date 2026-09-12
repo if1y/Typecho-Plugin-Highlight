@@ -1,6 +1,6 @@
 <?php
 
-namespace TypechoPlugin\PS_Highlight\Engine;
+namespace TypechoPlugin\Highlight\Engine;
 
 if (!defined('__TYPECHO_ROOT_DIR__')) exit;
 
