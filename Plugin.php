@@ -308,17 +308,21 @@ class Plugin implements PluginInterface
                     // Phiki 返回完整结构
                     if ($showLineNumbers) {
                         // 需要添加行号，处理 HTML
-                        $processedHtml = self::addLineNumbersToHtml($highlightedHtml);
+                        [$processedHtml, $lineNumWidth] = self::addLineNumbersToHtml($highlightedHtml);
                         $preFragment = $dom->createDocumentFragment();
                         $preFragment->appendXML($processedHtml);
                         $newPre = $preFragment->firstChild;
 
-                        // 添加行号类到 code 元素
+                        // 添加行号类到 code 元素，并按最大行号位数固定行号栏宽度
                         $code = $newPre->getElementsByTagName('code')->item(0);
                         if ($code) {
                             $class = $code->getAttribute('class');
                             $class = trim($class . ' code-block-extension-code-show-num');
                             $code->setAttribute('class', $class);
+                            $style = $code->getAttribute('style');
+                            $style .= ($style !== '' && substr(rtrim($style), -1) !== ';' ? ';' : '')
+                                . self::setLineNumberWidthStyle($lineNumWidth);
+                            $code->setAttribute('style', trim($style));
                         }
 
                         $result = $dom->saveHTML($newPre);
@@ -338,7 +342,9 @@ class Plugin implements PluginInterface
 
                     // 添加行号处理
                     if ($showLineNumbers) {
-                        $processedHtml = self::addLineNumbersToHtmlForHighlight($highlightedHtml);
+                        [$processedHtml, $lineNumWidth] = self::addLineNumbersToHtmlForHighlight($highlightedHtml);
+                        // 按最大行号位数固定行号栏宽度，避免多位数行号导致代码位移
+                        $newCode->setAttribute('style', self::setLineNumberWidthStyle($lineNumWidth));
                     } else {
                         $processedHtml = $highlightedHtml;
                     }
@@ -363,7 +369,7 @@ class Plugin implements PluginInterface
     /**
      * 为高亮后的 HTML 添加行号
      * @param string $html Phiki 引擎返回的高亮 HTML
-     * @return string 处理后的 HTML
+     * @return array [处理后的 HTML, 行号最大位数]
      */
     private static function addLineNumbersToHtml($html)
     {
@@ -394,13 +400,14 @@ class Plugin implements PluginInterface
         }
 
         $result = $dom->saveHTML();
-        return self::cleanHtml($result);
+        // 实际行数 = 计数器最终值 - 1
+        return [self::cleanHtml($result), strlen((string)max(1, $lineNum - 1))];
     }
 
     /**
      * 为 highlight.php 引擎的高亮 HTML 添加行号
      * @param string $html highlight.php 返回的代码 HTML
-     * @return string 处理后的 HTML
+     * @return array [处理后的 HTML, 行号最大位数]
      */
     private static function addLineNumbersToHtmlForHighlight($html)
     {
@@ -421,7 +428,24 @@ class Plugin implements PluginInterface
             $lineNum++;
         }
 
-        return rtrim($result);
+        return [rtrim($result), strlen((string)max(1, $lineNum - 1))];
+    }
+
+    /**
+     * 生成行号栏宽度的内联样式
+     *
+     * 宽度按最大行号位数动态计算（2 位 -> 2ch，3 位 -> 3ch，4 位 -> 4ch …），
+     * 最小宽度固定为 2ch：绝大多数代码块不超过 99 行，统一取下限可让
+     * 各代码块行号栏宽度尽量一致、观感整齐；超过 99 行时按实际位数加宽，
+     * 因此无论多少行都不会出现行号被截断。又因为宽度固定，行号由
+     * 9 变 10、99 变 100 时代码左边缘不会发生位移。
+     *
+     * @param int $digits 该代码块行号的最大位数
+     * @return string 形如 "--ps-line-num-width:2ch"
+     */
+    private static function setLineNumberWidthStyle($digits)
+    {
+        return '--ps-line-num-width:' . max(2, (int) $digits) . 'ch';
     }
 
     /**

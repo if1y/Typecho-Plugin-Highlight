@@ -42,8 +42,20 @@
     counter-increment: line;
     content: counter(line);
     display: inline-block;
+    /*
+     * 行号栏固定宽度（由后端按该代码块最大行号位数写入 --ps-line-num-width）：
+     * 最小 2ch（对应 99 行以内，保证各代码块宽度一致美观），
+     * 999 行 -> 3ch，9999 行 -> 4ch。
+     * 若宽度随内容自适应，行号从 1 位变成 2 位、3 位时会挤占行尾，
+     * 导致代码整体向右位移，无法对齐。固定为最大位数宽度后，
+     * 配合 text-align: right，代码左边缘始终一致。
+     * 此处回退值 2ch 与后端下限一致，用于未注入变量的旧缓存页面。
+     */
+    box-sizing: content-box;
+    width: var(--ps-line-num-width, 2ch);
     margin-right: 1em;
     text-align: right;
+    white-space: nowrap;
     color: var(--code-linenum-color, #8c959f);
     font-size: 0.9em;
     user-select: none;
