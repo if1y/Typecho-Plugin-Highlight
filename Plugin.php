@@ -97,6 +97,16 @@ class Plugin implements PluginInterface
             '在代码块右上角添加复制按钮'
         );
         $form->addInput($showCopyButton);
+
+        // 语法名称展示
+        $showLanguageName = new Checkbox(
+            'showLanguageName',
+            ['1' => '显示语法名称'],
+            ['1'],
+            '显示语法名称',
+            '在代码块左上角展示检测到的代码语法名称'
+        );
+        $form->addInput($showLanguageName);
     }
 
     /**
@@ -224,13 +234,24 @@ class Plugin implements PluginInterface
                 $language = self::extractLanguage($code);
                 $codeText = $code->textContent;
 
-                // 调用引擎高亮
-                $highlightedHtml = $engine->highlight($codeText, $language);
+                // 调用引擎高亮，同时取得实际生效的语言标识（自动检测时尤为有用）
+                [$highlightedHtml, $detectedLanguage] = $engine->highlight($codeText, $language);
 
                 // 获取插件配置
                 $options = Options::alloc();
                 $pluginConfig = $options->plugin('Highlight');
                 $showLineNumbers = isset($pluginConfig->showLineNumbers) && in_array('1', (array)$pluginConfig->showLineNumbers);
+                $showLanguageName = isset($pluginConfig->showLanguageName) && in_array('1', (array)$pluginConfig->showLanguageName);
+
+                // 展示语言优先采用作者在代码块上标注的 language-xxx，未标注时才用自动检测结果。
+                // 原因：highlight.php 中 "c" 是 cpp 与 arduino 共用的别名，而别名表是
+                // 「别名 -> 主语言」的单值映射，arduino 字母序在前、会覆盖 cpp，
+                // 引擎因此把标注为 "c" 的代码解析成主语言 "arduino"。
+                // 若直接展示引擎返回值，作者标注的 c 会被错误显示为 Arduino。
+                $displayLanguage = ($language !== null && $language !== '') ? $language : $detectedLanguage;
+
+                // 语法名称（后端 SSR 渲染，无语言时隐藏）
+                $languageLabel = $showLanguageName ? self::getLanguageDisplayName($displayLanguage) : '';
 
                 // highlight.php 只返回 code 内容，需要构建结构
                 $newPre = $dom->createElement('pre');
@@ -253,6 +274,18 @@ class Plugin implements PluginInterface
                 $codeFragment = $dom->createDocumentFragment();
                 $codeFragment->appendXML($processedHtml);
                 $newCode->appendChild($codeFragment);
+
+                // 语法名称标签：直接注入 pre 内，CSS 绝对定位浮于代码上方
+                if ($languageLabel !== '') {
+                    $newPre->setAttribute('class', 'code-block-extension-has-lang-name');
+
+                    $langSpan = $dom->createElement('span');
+                    $langSpan->setAttribute('class', 'code-block-extension-lang-name');
+                    // 使用文本节点自动转义，避免特殊字符破坏 HTML
+                    $langSpan->appendChild($dom->createTextNode($languageLabel));
+                    $newPre->appendChild($langSpan);
+                }
+
                 $newPre->appendChild($newCode);
 
                 $result = $dom->saveHTML($newPre);
@@ -321,6 +354,92 @@ class Plugin implements PluginInterface
             }
         }
         return null;
+    }
+
+    /**
+     * 将语言标识映射为便于阅读的语法名称
+     *
+     * highlight.php 的语言标识由「主名 + 别名」组成（如 javascript 的别名为 js、jsx），
+     * 自动检测返回的语言标识可能是别名，这里统一归类到最常见的主名。
+     *
+     * @param string|null $language 语言标识
+     * @return string 展示用语法名称，未知时返回原标识，空值返回空字符串
+     */
+    private static function getLanguageDisplayName($language)
+    {
+        if ($language === null || $language === '') {
+            return '';
+        }
+
+        $key = strtolower((string) $language);
+
+        // 别名 -> 展示名称（与 highlight.php 各语言定义中的 aliases 保持一致）
+        static $map = [
+            // 脚本 / 通用语言
+            'javascript' => 'JavaScript', 'js' => 'JavaScript', 'jsx' => 'JavaScript',
+            'mjs' => 'JavaScript', 'cjs' => 'JavaScript',
+            'typescript' => 'TypeScript', 'ts' => 'TypeScript', 'tsx' => 'TypeScript',
+            'python' => 'Python', 'py' => 'Python', 'gyp' => 'Python', 'ipython' => 'Python',
+            'ruby' => 'Ruby', 'rb' => 'Ruby', 'gemspec' => 'Ruby', 'podspec' => 'Ruby',
+            'thor' => 'Ruby', 'irb' => 'Ruby',
+            'php' => 'PHP', 'php3' => 'PHP', 'php4' => 'PHP', 'php5' => 'PHP',
+            'php6' => 'PHP', 'php7' => 'PHP', 'phps' => 'PHP', 'phtml' => 'PHP',
+            'csharp' => 'C#', 'cs' => 'C#',
+            'c' => 'C',
+            // arduino 与 cpp 共用 c/cc/h 等别名，引擎可能把 c 类代码解析为 arduino，
+            // 此处单独映射，保证未标注语言时的自动检测结果也能正确展示
+            'arduino' => 'Arduino',
+            'cpp' => 'C++', 'c++' => 'C++', 'cc' => 'C++', 'cxx' => 'C++',
+            'h' => 'C/C++ Header', 'h++' => 'C++', 'hh' => 'C++', 'hpp' => 'C++', 'hxx' => 'C++',
+            'objectivec' => 'Objective-C', 'objective-c' => 'Objective-C', 'objc' => 'Objective-C',
+            'go' => 'Go', 'golang' => 'Go',
+            'rust' => 'Rust', 'rs' => 'Rust',
+            'kotlin' => 'Kotlin', 'kt' => 'Kotlin', 'kts' => 'Kotlin',
+            'dart' => 'Dart',
+            'swift' => 'Swift',
+            'scala' => 'Scala',
+            'perl' => 'Perl', 'pl' => 'Perl', 'pm' => 'Perl',
+            'lua' => 'Lua',
+            'r' => 'R',
+            'haskell' => 'Haskell', 'hs' => 'Haskell',
+            'erlang' => 'Erlang', 'erl' => 'Erlang',
+            'elixir' => 'Elixir', 'ex' => 'Elixir',
+            'clojure' => 'Clojure', 'clj' => 'Clojure',
+            'groovy' => 'Groovy',
+            'vbnet' => 'VB.NET', 'vb' => 'VB.NET',
+            'asm' => 'Assembly', 'nasm' => 'Assembly', 'x86asm' => 'Assembly',
+
+            // Shell / 脚本环境
+            'bash' => 'Bash', 'sh' => 'Shell', 'zsh' => 'Zsh', 'ksh' => 'Ksh',
+            'shell' => 'Shell', 'console' => 'Shell Session', 'shellsession' => 'Shell Session',
+            'powershell' => 'PowerShell', 'ps' => 'PowerShell', 'ps1' => 'PowerShell',
+
+            // 标记 / 数据格式
+            'html' => 'HTML', 'xhtml' => 'HTML',
+            'xml' => 'XML', 'rss' => 'XML', 'atom' => 'XML', 'xjb' => 'XML',
+            'xsd' => 'XML', 'xsl' => 'XML', 'plist' => 'XML', 'wsdl' => 'XML',
+            'json' => 'JSON', 'jsonc' => 'JSON',
+            'yaml' => 'YAML', 'yml' => 'YAML',
+            'toml' => 'TOML',
+            'ini' => 'INI',
+            'markdown' => 'Markdown', 'md' => 'Markdown', 'mkdown' => 'Markdown', 'mkd' => 'Markdown',
+            'css' => 'CSS',
+            'scss' => 'SCSS',
+            'less' => 'Less',
+            'graphql' => 'GraphQL', 'gql' => 'GraphQL',
+            'protobuf' => 'Protobuf', 'proto' => 'Protobuf',
+            'sql' => 'SQL',
+            'diff' => 'Diff', 'patch' => 'Diff',
+
+            // 工具链 / 配置
+            'dockerfile' => 'Dockerfile', 'docker' => 'Dockerfile',
+            'makefile' => 'Makefile', 'mk' => 'Makefile', 'mak' => 'Makefile',
+            'nginx' => 'Nginx', 'nginxconf' => 'Nginx',
+            'vim' => 'Vim Script',
+            'plaintext' => 'Plain Text', 'text' => 'Plain Text', 'txt' => 'Plain Text',
+        ];
+
+        return isset($map[$key]) ? $map[$key] : $language;
     }
 
     /**

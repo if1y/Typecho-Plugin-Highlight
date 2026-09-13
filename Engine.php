@@ -65,7 +65,7 @@ class Engine
      * 执行代码高亮
      * @param string $code 代码内容
      * @param string|null $language 语言标识
-     * @return string 高亮后的 HTML（仅包含 code 内部）
+     * @return array [高亮后的 HTML（仅包含 code 内部）, 实际生效的语言标识]
      */
     public function highlight($code, $language)
     {
@@ -85,7 +85,8 @@ class Engine
             $result = $highlighter->highlightAuto($code);
         }
 
-        return $result->value;
+        // 自动检测时 language 为识别出的语言标识（可能是别名），供展示语法名称使用
+        return [$result->value, $result->language];
     }
 
     /**

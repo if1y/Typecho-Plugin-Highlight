@@ -62,6 +62,35 @@
     opacity: 0.6;
 }
 
+/* 语法名称标签 */
+/*
+ * 标签由后端 SSR 直接注入 pre 内（span），绝对定位浮于代码上方。
+ * pre 是定位参照（见 .code-block-wrapper pre 的 position: relative），
+ * 因此只需为带标签的 pre 预留顶部内边距，代码正文与行号不受影响。
+ * 选择器带 pre 标签以覆盖 .code-block-wrapper pre 的 padding 简写。
+ */
+pre.code-block-extension-has-lang-name {
+    padding-top: 38px;
+}
+
+.code-block-extension-lang-name {
+    position: absolute;
+    top: 10px;
+    left: 14px;
+    z-index: 5;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    color: var(--code-lang-name-color, #57606a);
+    background-color: var(--code-lang-name-bg, rgba(0, 0, 0, 0.05));
+    text-transform: none;
+    user-select: none;
+    pointer-events: none;
+}
+
 /* 复制按钮样式 */
 .code-block-wrapper .copy-button {
     position: absolute;
@@ -109,6 +138,11 @@
     .code-block-extension-code-line::before {
         --code-linenum-color: #6e7681;
     }
+
+    .code-block-extension-lang-name {
+        --code-lang-name-color: #8b949e;
+        --code-lang-name-bg: rgba(255, 255, 255, 0.08);
+    }
 }
 
 /* 响应式调整 */
@@ -116,6 +150,17 @@
     .code-block-wrapper pre {
         padding: 12px;
         font-size: 13px;
+    }
+
+    /* 紧随上方 padding 简写之后，确保移动端顶部间距同样生效 */
+    pre.code-block-extension-has-lang-name {
+        padding-top: 32px;
+    }
+
+    .code-block-extension-lang-name {
+        top: 8px;
+        left: 10px;
+        font-size: 11px;
     }
 
     .code-block-wrapper .copy-button {

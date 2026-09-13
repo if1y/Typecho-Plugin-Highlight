@@ -1,6 +1,6 @@
 # Typecho-Plugin-Highlight
 
-基于 [MoXiaoXi233/PS-HighLight-Plugin](https://github.com/MoXiaoXi233/PS-HighLight-Plugin) 的 Typecho 代码高亮插件
+基于 [MoXiaoXi233/PS-HighLight-Plugin](https://github.com/MoXiaoXi233/PS-HighLight-Plugin) 的 Typecho 代码高亮插件，加入诸多改进和特性
 
 ## 安装
 
@@ -13,6 +13,25 @@
 ### 主题选择
 
 可在插件设置中选择主题，对应的 CSS 会自动注入到页面 `<head>` 中，切换即时生效。
+
+### 显示选项
+
+可在插件设置中独立开关以下功能：
+
+| 选项 | 说明 |
+| --- | --- |
+| 显示行号 | 在代码块左侧显示行号 |
+| 显示复制按钮 | 在代码块右上角添加复制按钮 |
+| 显示语法名称 | 在代码块左上角展示检测到的代码语法名称 |
+
+### 语法名称
+
+语法名称由后端在渲染阶段直接写入 HTML（SSR），不依赖 JavaScript，因此首屏无闪烁，禁用 JS 或阅读模式下同样可见。
+
+- 语言取自代码块的 `language-xxx` 类；未标注时使用 highlight.php 的自动检测结果。
+- 自动检测返回的可能是语言别名（如 `js`、`ts`），插件会统一映射为友好名称（如 `JavaScript`、`TypeScript`）。
+- 无法识别语言时（如纯文本），不展示语法名称标签。
+- 标签独立于 `<code>` 之外，复制代码时不会将其一并复制。
 
 ## 评论高亮
 
@@ -28,10 +47,10 @@
 
 ```
 Highlight/
-├── Plugin.php           插件入口：配置面板、钩子注册、内容高亮处理
+├── Plugin.php           插件入口：配置面板、钩子注册、内容高亮处理、语法名称注入
 ├── Engine.php           highlight.php 高亮引擎（单例）
 ├── assets/
-│   ├── highlight.css    行号、复制按钮等前端样式
+│   ├── highlight.css    行号、复制按钮、语法名称标签等前端样式
 │   └── highlight.js     复制按钮与动态代码块处理
 └── vendor/              highlight.php 库（Autoloader、Highlighter 等）
     ├── languages/       语言定义文件
