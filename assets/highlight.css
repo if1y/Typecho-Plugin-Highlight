@@ -8,6 +8,18 @@
     position: relative;
     margin: 16px 0;
     overflow: hidden;
+    /*
+     * 横向排列：左侧为独立的行号列（自身不滚动），右侧 pre 为唯一横向滚动容器。
+     * 行号整体固定在代码块左侧，代码横向滚动时不再带动行号位移。
+     * 采用默认的 align-items: stretch，使行号列高度与容器一致。
+     *
+     * 背景与圆角统一由 wrapper 承载（背景色在 JS 中取主题原色后注入）：
+     * 若背景留在 pre 上，位于 pre 外部的行号列就没有圆角，两者交界会露出
+     * 生硬接缝。上提到 wrapper 后，行号列与代码区共用一个连续的圆角矩形。
+     */
+    display: flex;
+    flex-direction: row;
+    border-radius: 6px;
 }
 
 /* 代码块基础样式 */
@@ -19,6 +31,37 @@
     border-radius: 6px;
     font-size: 14px;
     line-height: 1.6;
+    /* flex 子项：占满行号列以外的空间，min-width:0 保证内容超宽时能收缩并出现横向滚动 */
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/*
+ * 行号列接管水平内边距后，pre 不再重复留白。
+ * 左内边距保留 1ch：分割线绘制在行号列右缘，为 0 时代码会紧贴线条。
+ * 右内边距置 0：横向滚动容器的末端 padding 在滚到最右时会被溢出裁掉，
+ * 右缘间距改由每一行的右内边距提供（见下一条规则）。
+ * 背景与圆角已移至 wrapper，pre 需透明且去圆角，避免与 wrapper 的圆角叠加
+ * 或再次出现接缝。
+ */
+.code-block-wrapper pre.has-linenums {
+    padding-left: 1ch;
+    padding-right: 0;
+    background: transparent;
+    border-radius: 0;
+}
+
+/*
+ * 代码与容器右缘的间距。
+ * 不给 pre / code 加右内边距：横向滚动末端的容器内边距在滚到最右时会被溢出裁掉，
+ * 而 code 满宽时其内边距又会落在溢出内容的左侧，均看不到效果。
+ * 改为给每一行加右内边距——行元素是 inline，其内边距必然紧跟在行文本之后，
+ * 因此最长行的末端也会带上空白，滚动到最右时依旧保留间距。取 2ch 与代码同宽字号。
+ * code 的 width:max-content（由 JS 内联，优先级高于主题规则）使行盒贴合内容宽度，
+ * 无论行盒呈 inline 还是 block 形态，该内边距都落在最长内容之后。
+ */
+.code-block-wrapper pre.has-linenums .code-block-extension-code-line {
+    padding-right: 2ch;
 }
 
 .code-block-wrapper code {
@@ -60,6 +103,84 @@
     font-size: 0.9em;
     user-select: none;
     opacity: 0.6;
+}
+
+/*
+ * 独立行号列：位于 pre 之外的 flex 子项，不参与 pre 的横向滚动，整列固定左侧。
+ * 宽度与内边距对齐 pre（上下内边距一致、左内边距接管 pre 的留白、右 1em 作为列间距），
+ * 行号右对齐，因此各代码块行号起点整齐。
+ */
+.code-block-wrapper .code-block-linenums {
+    flex: 0 0 auto;
+    box-sizing: content-box;
+    width: var(--highlight-line-num-width, 2ch);
+    /*
+     * 右内边距即行号列与代码之间的间距：1em 显得过宽、0.5em 又偏窄，
+     * 取 0.75em 作为折中，使行号贴右的同时与代码保持清晰间隔。
+     * 左内边距在 JS 中会按 pre + code 两级缩进覆盖，此处仅为占位。
+     */
+    padding: 16px 0.75em 16px 16px;
+    text-align: right;
+    /*
+     * 字号、字体与行高均由 JavaScript 从 pre / 代码行实际计算值注入，
+     * 这里的值只是占位，不参与最终排版。
+     * 原因：主题可能把 pre 的字号改成非 14px（如 16px）或更换字体，行号列若写死
+     * 像素，行盒高度就会与代码行不等，导致行号整体/逐行错位。
+     */
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--code-linenum-color, #8c959f);
+    user-select: none;
+    pointer-events: none;
+    /* 分割线由下方 ::after 伪元素绘制，故列本身需作为其定位基准 */
+    position: relative;
+}
+
+/*
+ * 行号区与代码区之间的分割线。
+ * 用绝对定位的伪元素而非列的 border：border 会沿列的全高（含上下内边距）绘制。
+ * 顶端由 JS 按首行之前的偏移写入，高度取全部行号行盒之和，使线条恰好覆盖行号区、
+ * 末端贴近末行行号；不使用 bottom 基准，因为列会被拉伸到容器高度，列底远低于末行。
+ * right:0 即列内边距盒右缘，正好落在行号与代码之间。
+ * 线宽固定 2px，线色由 --code-linenum-border 独立控制：不取自容器边框
+ * （容器边线通常又细又浅，沿用会看不清），取值刻意淡于行号文字。
+ */
+.code-block-wrapper .code-block-linenums::after {
+    content: "";
+    position: absolute;
+    top: var(--linenum-line-top, 16px);
+    height: var(--linenum-line-height, calc(100% - 32px));
+    right: 0;
+    width: 2px;
+    /*
+     * 极淡的灰色分隔线。取值低于行号文字的观感强度（行号约 40% 灰，此处约 12%），
+     * 使线条仅作区域提示、不致喧宾夺主。需要时可由主题覆盖该变量调整。
+     */
+    background-color: var(--code-linenum-border, rgba(0, 0, 0, 0.12));
+    pointer-events: none;
+}
+
+.code-block-wrapper .code-block-linenums > span {
+    display: block;
+    white-space: nowrap;
+    /* 行号文字比代码略小 */
+    font-size: 0.9em;
+    /*
+     * 继承列的行高。列的行高由 JavaScript 设为代码行的「计算像素值」（绝对长度），
+     * 绝对长度不像数字那样会按 span 的较小字号重新换算，所以每个行号行盒高度
+     * 恒等于代码行行高，逐行严丝合缝。
+     */
+    line-height: inherit;
+    /*
+     * 透明度只作用于行号文字，不可放在列容器上：列带有继承自 pre 的
+     * 背景色，若对整列设 opacity 会让背景一并变半透明，导致底色不实。
+     */
+    opacity: 0.6;
+}
+
+/* 行号已由独立列承载，隐藏 code 内原有的 ::before 行号（同时作为无 JS 时的回退） */
+.code-block-extension-code-show-num.has-linenums-col .code-block-extension-code-line::before {
+    display: none;
 }
 
 /* 语法名称标签 */
@@ -143,6 +264,16 @@ pre.code-block-extension-has-lang-name {
         --code-linenum-color: #6e7681;
     }
 
+    /*
+     * 行号列并非伪元素的后代、无法继承上面的变量，需单独声明暗色行号颜色，
+     * 否则独立行号列会退回亮色 fallback，暗色主题下行号偏亮。
+     */
+    .code-block-wrapper .code-block-linenums {
+        --code-linenum-color: #6e7681;
+        /* 暗色背景下分割线同样保持极淡，低于行号文字的观感强度 */
+        --code-linenum-border: rgba(255, 255, 255, 0.14);
+    }
+
     .code-block-extension-lang-name {
         --code-lang-name-color: #8b949e;
         --code-lang-name-bg: rgba(255, 255, 255, 0.08);
@@ -159,6 +290,17 @@ pre.code-block-extension-has-lang-name {
     /* 紧随上方 padding 简写之后，确保移动端顶部间距同样生效 */
     pre.code-block-extension-has-lang-name {
         padding-top: 32px;
+    }
+
+    /* padding 简写会重置水平内边距，此处重新给出移动端的左右间距策略 */
+    .code-block-wrapper pre.has-linenums {
+        padding-left: 1ch;
+        padding-right: 0;
+    }
+
+    /* 行号列同步移动端内边距；字号与行高由 JavaScript 按 pre 实际值注入 */
+    .code-block-wrapper .code-block-linenums {
+        padding: 12px 0.75em 12px 12px;
     }
 
     .code-block-extension-lang-name {

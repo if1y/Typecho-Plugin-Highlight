@@ -24,8 +24,11 @@
         // 语法名称标签（SSR 注入在 pre 内，需迁移到不滚动的 wrapper）
         const langName = preElement.querySelector('.code-block-extension-lang-name');
 
-        // 既无标签又无需复制按钮时，不做包装，保持 DOM 简洁
-        if (!langName && !CONFIG.showCopyButton) return;
+        // 是否渲染行号（后端以 class 标记）
+        const hasLineNumbers = !!preElement.querySelector('code.code-block-extension-code-show-num');
+
+        // 无标签、无需复制按钮且无行号时，不做包装，保持 DOM 简洁
+        if (!langName && !CONFIG.showCopyButton && !hasLineNumbers) return;
 
         // 创建包装容器：自身不滚动，作为标签与按钮共同的绝对定位基准
         const wrapper = document.createElement('div');
@@ -40,6 +43,9 @@
         if (langName) {
             wrapper.insertBefore(langName, preElement);
         }
+
+        // 构建独立的行号列（位于 pre 之外，固定在代码块左侧，不随横向滚动位移）
+        buildLineNumbers(preElement);
 
         // 复制按钮可选
         if (!CONFIG.showCopyButton) return;
@@ -57,6 +63,157 @@
         });
 
         wrapper.appendChild(button);
+    }
+
+    /**
+     * 构建独立行号列，使各行行号作为一个整体固定在代码块左侧
+     *
+     * pre 自身是横向滚动容器，其内部的行号会随代码左右移动。这里把行号
+     * 抽取到 pre 之外的 .code-block-linenums 列中，交由不滚动的 wrapper
+     * 承载；pre 只负责代码区的横向滚动，行号因而始终固定于左侧。
+     */
+    function buildLineNumbers(preElement) {
+        const code = preElement.querySelector('code');
+        if (!code || !code.classList.contains('code-block-extension-code-show-num')) return;
+
+        const wrapper = preElement.parentElement;
+        if (!wrapper || wrapper.querySelector('.code-block-linenums')) return;
+
+        const lines = code.querySelectorAll('.code-block-extension-code-line');
+        if (lines.length === 0) return;
+
+        const column = document.createElement('div');
+        column.className = 'code-block-linenums';
+        column.setAttribute('aria-hidden', 'true');
+
+        // 行号栏宽度由后端内联在 code 上，列并非 code 后代、无法继承该变量，需复制过来
+        const width = code.style.getPropertyValue('--highlight-line-num-width');
+        if (width) {
+            column.style.setProperty('--highlight-line-num-width', width.trim());
+        }
+
+        /*
+         * 背景与圆角统一交给 wrapper：代码块背景原本渲染在 pre（或 code）上，
+         * 而位于 pre 外部的行号列没有圆角，两者交界会出现生硬接缝。
+         * 这里把主题背景色提取到 wrapper，再把 pre/code 背景置为透明，
+         * 使行号列与代码区共用一个由 wrapper 绘制的连续圆角矩形。
+         * 插件无从预知主题色值，故运行时读取实际计算值。
+         */
+        const isOpaqueColor = function (color) {
+            return color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)';
+        };
+        const preBackground = getComputedStyle(preElement).backgroundColor;
+        const codeBackground = getComputedStyle(code).backgroundColor;
+        if (isOpaqueColor(preBackground)) {
+            wrapper.style.backgroundColor = preBackground;
+        } else if (isOpaqueColor(codeBackground)) {
+            wrapper.style.backgroundColor = codeBackground;
+        }
+        // 内联置透明，确保覆盖主题的 pre / pre code.hljs 背景规则
+        preElement.style.background = 'transparent';
+        code.style.background = 'transparent';
+
+        // 边框同样上提：若主题给 pre 画了可见边框，留在 pre 上会是方角，
+        // 与 wrapper 的圆角不吻合；转移到 wrapper 后圆角与边框自然贴合。
+        const preBorderStyle = getComputedStyle(preElement);
+        if ((parseFloat(preBorderStyle.borderTopWidth) || 0) > 0) {
+            wrapper.style.border =
+                preBorderStyle.borderTopWidth + ' ' +
+                preBorderStyle.borderTopStyle + ' ' +
+                preBorderStyle.borderTopColor;
+            preElement.style.border = 'none';
+        }
+
+        /*
+         * 字号、字体、行高一律取 pre 与代码行的实际计算值，不写死像素。
+         * 行号列是 wrapper 的子元素，其 em 相对页面正文字号，且主题可能改动 pre 的
+         * 字号或字体；若用固定值，行号行盒高度会与代码行不等，出现整体或逐行错位。
+         * 行高取代码行的计算像素值（如 25.2px）设为绝对长度，子元素继承该长度时
+         * 不会按自身较小字号重算，因此每个行号行盒与代码行高度完全相等。
+         */
+        const preStyle = getComputedStyle(preElement);
+        const lineStyle = getComputedStyle(lines[0]);
+        column.style.fontFamily = preStyle.fontFamily;
+        column.style.fontSize = preStyle.fontSize;
+        if (lineStyle.lineHeight && lineStyle.lineHeight !== 'normal') {
+            column.style.lineHeight = lineStyle.lineHeight;
+        }
+
+        /*
+         * 首行行号必须与首行代码顶点齐平。代码可能同时受两层内边距向下挤压：
+         * pre 自身的内边距，以及 code 的内边距（例如 hljs 主题的
+         * pre code.hljs{padding:1em} 优先级高于插件样式，实际覆盖生效）。
+         * 若只复制 pre 的内边距，会漏掉 code 的内边距，行号便整体偏高约半行。
+         * 因此直接按实际几何计算：列的上内边距 = 代码内容顶边相对 wrapper 的偏移。
+         */
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const codeRect = code.getBoundingClientRect();
+        const codePaddingTop = parseFloat(getComputedStyle(code).paddingTop) || 0;
+        /*
+         * 基准必须是 wrapper 的内容区顶部，而不是外边框顶部：
+         * 行号列是 wrapper 的子元素，其顶端从内容区起算，而 getBoundingClientRect()
+         * 返回的是外边框顶部，二者相差 wrapper 自身的边框宽度。
+         * 上面已把原本长在 pre 上的边框转移到 wrapper，若此处不扣除该边框，
+         * 行号整体就会偏移约半行，表现为首行即与代码不齐。
+         * 无边框（宽度为 0）时该修正项自然为 0，不影响原有对齐。
+         */
+        const wrapperBorderTop = parseFloat(getComputedStyle(wrapper).borderTopWidth) || 0;
+        const offsetTop = codeRect.top - wrapperRect.top - wrapperBorderTop + codePaddingTop;
+        if (offsetTop > 0) {
+            column.style.paddingTop = offsetTop + 'px';
+        }
+
+        /*
+         * 行号水平位置还原：行号原在 code 内部，其左侧叠有 pre 与 code 两级内边距，
+         * 外置到 pre 之外的列后只保留了相当于 pre 那一层的缩进，漏掉 code 自身的
+         * 左内边距，导致行号整体偏左约两个数字宽。这里补回第二级缩进，使行号水平
+         * 位置与原实现一致；并把 code 的左内边距清零，避免它转而成为行号与代码之间
+         * 的额外空隙。此处 pre 尚未添加 has-linenums 类（该标记在本函数末尾才加），
+         * 故此刻读到的 paddingLeft 仍是原始值，可放心作为基准。
+         */
+        const prePaddingLeft = parseFloat(getComputedStyle(preElement).paddingLeft) || 0;
+        const codePaddingLeft = parseFloat(getComputedStyle(code).paddingLeft) || 0;
+        /*
+         * 在还原出的缩进基础上整体左收一个字符宽（1ch）：行号列左边缘固定在
+         * wrapper 左侧无法再左移，故通过缩小左缩进把列的右边界一并左收，
+         * 使代码区多出一个字符的可用宽度，减少挤占；右内边距不变，
+         * 行号与代码的间距观感维持原样。
+         */
+        const basePaddingLeft = prePaddingLeft + codePaddingLeft;
+        column.style.paddingLeft = 'calc(' + basePaddingLeft + 'px - 1ch)';
+        code.style.paddingLeft = '0';
+
+        /*
+         * 代码与容器右缘的间距由每一行的 padding-right 提供（见 CSS）。
+         * 这里把 code 宽度收缩到实际内容宽度：满宽 block 会让行盒宽于内容，
+         * 行内边距可能落在溢出内容左侧而失效；贴合内容后内边距必然跟在最长行之后。
+         * 用内联样式设置，优先级高于主题的 pre code.hljs 规则。
+         */
+        code.style.width = 'max-content';
+
+        lines.forEach(function (line) {
+            const num = document.createElement('span');
+            num.textContent = line.getAttribute('data-line-num') || '';
+            column.appendChild(num);
+        });
+
+        wrapper.insertBefore(column, preElement);
+
+        /*
+         * 分割线只覆盖行号所在的高度：顶端自列顶下移首行之前的偏移，
+         * 高度取全部行号行盒之和，使线底恰好落在末行行号底缘、贴近行号。
+         * 不能用 bottom 相对列底定位：行号列会被拉伸到容器高度，列底往往远低于
+         * 末行行号，以列底为基准会让线延伸进下方空白，显得离行号过远。
+         */
+        const lineHeightPx = parseFloat(lineStyle.lineHeight) || 0;
+        column.style.setProperty('--linenum-line-top', (offsetTop > 0 ? offsetTop : 0) + 'px');
+        if (lineHeightPx > 0) {
+            column.style.setProperty('--linenum-line-height', (lineHeightPx * lines.length) + 'px');
+        }
+
+        // 标记：隐藏 code 内原有的 ::before 行号，并让 pre 让出左侧内边距给行号列
+        code.classList.add('has-linenums-col');
+        preElement.classList.add('has-linenums');
     }
 
     /**
