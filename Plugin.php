@@ -275,7 +275,9 @@ class Plugin implements PluginInterface
                 $codeFragment->appendXML($processedHtml);
                 $newCode->appendChild($codeFragment);
 
-                // 语法名称标签：直接注入 pre 内，CSS 绝对定位浮于代码上方
+                // 语法名称标签：SSR 先注入 pre 内（无 JS 时也能正常展示）。
+                // pre 是横向滚动容器，前端脚本会将该标签迁移到不滚动的
+                // .code-block-wrapper 下，使其固定于代码块左上角不随滚动位移。
                 if ($languageLabel !== '') {
                     $newPre->setAttribute('class', 'code-block-extension-has-lang-name');
 

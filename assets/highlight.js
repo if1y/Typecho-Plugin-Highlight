@@ -12,19 +12,37 @@
     };
 
     /**
-     * 添加复制按钮
+     * 包装代码块：创建不滚动的 wrapper，迁移语法标签并添加复制按钮
+     *
+     * 注意：pre 自身是横向滚动容器（overflow-x: auto），其内部的绝对定位元素
+     * 会随内容一起滚动。因此需把语法标签从 pre 中移出，挂到不滚动的 wrapper 上，
+     * 才能使其固定停留在代码块左上角。
      */
     function addCopyButton(preElement) {
-        if (!CONFIG.showCopyButton) return;
         if (preElement.parentElement.classList.contains('code-block-wrapper')) return;
 
-        // 创建包装容器
+        // 语法名称标签（SSR 注入在 pre 内，需迁移到不滚动的 wrapper）
+        const langName = preElement.querySelector('.code-block-extension-lang-name');
+
+        // 既无标签又无需复制按钮时，不做包装，保持 DOM 简洁
+        if (!langName && !CONFIG.showCopyButton) return;
+
+        // 创建包装容器：自身不滚动，作为标签与按钮共同的绝对定位基准
         const wrapper = document.createElement('div');
         wrapper.className = 'code-block-wrapper';
 
         // 将 pre 元素包装起来
         preElement.parentNode.insertBefore(wrapper, preElement);
         wrapper.appendChild(preElement);
+
+        // 将语法标签从滚动的 pre 中移出，改挂到 wrapper 下。
+        // wrapper 不滚动且与 pre 几何一致，标签绝对定位后即固定于代码块左上角。
+        if (langName) {
+            wrapper.insertBefore(langName, preElement);
+        }
+
+        // 复制按钮可选
+        if (!CONFIG.showCopyButton) return;
 
         // 创建复制按钮
         const button = document.createElement('button');

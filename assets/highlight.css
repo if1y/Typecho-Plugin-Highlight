@@ -64,9 +64,13 @@
 
 /* 语法名称标签 */
 /*
- * 标签由后端 SSR 直接注入 pre 内（span），绝对定位浮于代码上方。
- * pre 是定位参照（见 .code-block-wrapper pre 的 position: relative），
- * 因此只需为带标签的 pre 预留顶部内边距，代码正文与行号不受影响。
+ * 标签由后端 SSR 注入 pre 内（span），前端脚本会将其迁移到不滚动的
+ * .code-block-wrapper 下，使其定位参照为 wrapper 而非滚动容器 pre，
+ * 从而在横向滚动代码时固定于代码块左上角。
+ *
+ * 顶部内边距保留在 pre 上：pre 即代码背景矩形，为其加 padding-top 可让
+ * 矩形在顶部扩张以容纳标签；wrapper 与 pre 几何一致（无内边距），
+ * 标签按 top 值自然浮于矩形内的左上角。
  * 选择器带 pre 标签以覆盖 .code-block-wrapper pre 的 padding 简写。
  */
 pre.code-block-extension-has-lang-name {
