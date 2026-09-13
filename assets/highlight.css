@@ -13,12 +13,18 @@
      * 行号整体固定在代码块左侧，代码横向滚动时不再带动行号位移。
      * 采用默认的 align-items: stretch，使行号列高度与容器一致。
      *
-     * 背景与圆角统一由 wrapper 承载（背景色在 JS 中取主题原色后注入）：
-     * 若背景留在 pre 上，位于 pre 外部的行号列就没有圆角，两者交界会露出
-     * 生硬接缝。上提到 wrapper 后，行号列与代码区共用一个连续的圆角矩形。
+     * 代码区的背景仍由 pre 的主题规则负责，此处不覆盖，以免锁死夜间配色。
+     * 但行号列位于 pre 之外、无法继承 pre 的背景，若 wrapper 也没有底色，
+     * 行号区就会露出页面背景、与代码区断开。故在此补一层同源底色供其透出：
+     * 取值复用主题的 CSS 变量而非 JS 读色，变量在夜间模式下会被主题重定义，
+     * 底色随之自动切换；若用内联固定色，夜间模式会失效。
+     * 主题未以该变量提供背景时回退为透明，此时行号区无底色（与未处理时一致）。
+     * wrapper 另在主题给 pre 画了可见边框时，由 JS 承接上提的边框，
+     * 借助此处的圆角让边框随容器统一收边。
      */
     display: flex;
     flex-direction: row;
+    background-color: var(--code-bg, transparent);
     border-radius: 6px;
 }
 
@@ -41,14 +47,12 @@
  * 左内边距保留 1ch：分割线绘制在行号列右缘，为 0 时代码会紧贴线条。
  * 右内边距置 0：横向滚动容器的末端 padding 在滚到最右时会被溢出裁掉，
  * 右缘间距改由每一行的右内边距提供（见下一条规则）。
- * 背景与圆角已移至 wrapper，pre 需透明且去圆角，避免与 wrapper 的圆角叠加
- * 或再次出现接缝。
+ * 背景与圆角一概不覆盖：背景须由主题变量驱动（覆盖会锁死夜间配色），
+ * 圆角须保留，否则去掉后代码块会变成直角。
  */
 .code-block-wrapper pre.has-linenums {
     padding-left: 1ch;
     padding-right: 0;
-    background: transparent;
-    border-radius: 0;
 }
 
 /*
@@ -278,6 +282,47 @@ pre.code-block-extension-has-lang-name {
         --code-lang-name-color: #8b949e;
         --code-lang-name-bg: rgba(255, 255, 255, 0.08);
     }
+}
+
+/*
+ * 夜间配色·属性/类切换方式。
+ * 上面的 @media (prefers-color-scheme: dark) 仅在跟随系统配色时生效；
+ * 不少主题改由 html / body 上的 class 或 data-theme 属性切换夜间
+ * （[data-theme="dark"]、.dark、:root.dark 等），此时媒体查询不触发，
+ * 行号、分割线、按钮与语法标签仍用亮色取值，落在深色底上偏亮。
+ * 此处以相同取值再声明一遍：选择器更具体且位于媒体查询之后，可正常覆盖。
+ */
+:root.dark .code-block-wrapper .copy-button,
+[data-theme="dark"] .code-block-wrapper .copy-button,
+.dark .code-block-wrapper .copy-button {
+    --code-copy-bg: rgba(255, 255, 255, 0.06);
+    --code-copy-border: rgba(255, 255, 255, 0.1);
+    --code-copy-text: #c9d1d9;
+}
+
+/* 无 JS 回退时仍由 ::before 显示行号，需与独立行号列同步暗色 */
+:root.dark .code-block-extension-code-line::before,
+[data-theme="dark"] .code-block-extension-code-line::before,
+.dark .code-block-extension-code-line::before {
+    --code-linenum-color: #6e7681;
+}
+
+/*
+ * 独立行号列与分割线。行号列是 pre 的兄弟节点，无法继承写在
+ * ::before 上的变量，须单独声明，否则暗色下会退回亮色 fallback。
+ */
+:root.dark .code-block-wrapper .code-block-linenums,
+[data-theme="dark"] .code-block-wrapper .code-block-linenums,
+.dark .code-block-wrapper .code-block-linenums {
+    --code-linenum-color: #6e7681;
+    --code-linenum-border: rgba(255, 255, 255, 0.14);
+}
+
+:root.dark .code-block-extension-lang-name,
+[data-theme="dark"] .code-block-extension-lang-name,
+.dark .code-block-extension-lang-name {
+    --code-lang-name-color: #8b949e;
+    --code-lang-name-bg: rgba(255, 255, 255, 0.08);
 }
 
 /* 响应式调整 */

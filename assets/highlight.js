@@ -100,34 +100,28 @@
         }
 
         /*
-         * 背景与圆角统一交给 wrapper：代码块背景原本渲染在 pre（或 code）上，
-         * 而位于 pre 外部的行号列没有圆角，两者交界会出现生硬接缝。
-         * 这里把主题背景色提取到 wrapper，再把 pre/code 背景置为透明，
-         * 使行号列与代码区共用一个由 wrapper 绘制的连续圆角矩形。
-         * 插件无从预知主题色值，故运行时读取实际计算值。
+         * 背景一律不在此处理，交回主题样式：主题背景多用 CSS 变量驱动
+         * （如 pre { background: var(--code-bg) }），夜间模式靠切换变量即时变色。
+         * 若在此读色后内联写死到 wrapper，内联样式优先级最高，变量切换便无法
+         * 生效，夜间模式会失效；同理也不再把 pre / code 内联置透明。
          */
-        const isOpaqueColor = function (color) {
-            return color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)';
-        };
-        const preBackground = getComputedStyle(preElement).backgroundColor;
-        const codeBackground = getComputedStyle(code).backgroundColor;
-        if (isOpaqueColor(preBackground)) {
-            wrapper.style.backgroundColor = preBackground;
-        } else if (isOpaqueColor(codeBackground)) {
-            wrapper.style.backgroundColor = codeBackground;
-        }
-        // 内联置透明，确保覆盖主题的 pre / pre code.hljs 背景规则
-        preElement.style.background = 'transparent';
-        code.style.background = 'transparent';
 
-        // 边框同样上提：若主题给 pre 画了可见边框，留在 pre 上会是方角，
-        // 与 wrapper 的圆角不吻合；转移到 wrapper 后圆角与边框自然贴合。
+        /*
+         * 边框同样上提：若主题给 pre 画了可见边框，留在 pre 上会只包住代码区
+         * （行号列在 pre 之外），且是方角，与 wrapper 的圆角不吻合；转移到
+         * wrapper 后边框随容器统一收边。
+         *
+         * 但颜色不能随宽度/样式一起写死：主题边框色多由 CSS 变量驱动
+         * （如 border: 1px solid var(--code-border)），夜间模式靠重定义变量变色。
+         * 若此处读色内联固化，夜间会继续沿用亮色边框，在深色底上异常扎眼。
+         * 故宽度与样式取实测值，颜色优先交给主题变量，变量缺失时回退实测色。
+         */
         const preBorderStyle = getComputedStyle(preElement);
         if ((parseFloat(preBorderStyle.borderTopWidth) || 0) > 0) {
-            wrapper.style.border =
-                preBorderStyle.borderTopWidth + ' ' +
-                preBorderStyle.borderTopStyle + ' ' +
-                preBorderStyle.borderTopColor;
+            wrapper.style.borderWidth = preBorderStyle.borderTopWidth;
+            wrapper.style.borderStyle = preBorderStyle.borderTopStyle;
+            wrapper.style.borderColor =
+                'var(--code-border, ' + preBorderStyle.borderTopColor + ')';
             preElement.style.border = 'none';
         }
 
@@ -245,20 +239,20 @@
             const column = wrapper.querySelector('.code-block-linenums');
             if (column) column.remove();
 
-            wrapper.style.backgroundColor = '';
-            wrapper.style.border = '';
+            // 构建时可能把主题边框上提至此（分项设置），需逐项还原
+            wrapper.style.borderWidth = '';
+            wrapper.style.borderStyle = '';
+            wrapper.style.borderColor = '';
         }
 
         // 还原标记类：无 JS 回退行号复现；clear 后按样式表原值重新布局
         if (code) {
             code.classList.remove('has-linenums-col');
-            code.style.background = '';
             code.style.width = '';
             code.style.paddingLeft = '';
         }
 
         preElement.classList.remove('has-linenums');
-        preElement.style.background = '';
         preElement.style.border = '';
     }
 
