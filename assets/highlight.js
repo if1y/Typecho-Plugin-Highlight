@@ -71,13 +71,20 @@
      * pre 自身是横向滚动容器，其内部的行号会随代码左右移动。这里把行号
      * 抽取到 pre 之外的 .code-block-linenums 列中，交由不滚动的 wrapper
      * 承载；pre 只负责代码区的横向滚动，行号因而始终固定于左侧。
+     *
+     * 本函数要求调用前处于「未构建」状态：视口跨断点重排时须先经
+     * teardownLineNumbers 还原内联样式，再回到这里按新的几何重新计算。
      */
     function buildLineNumbers(preElement) {
         const code = preElement.querySelector('code');
         if (!code || !code.classList.contains('code-block-extension-code-show-num')) return;
 
         const wrapper = preElement.parentElement;
-        if (!wrapper || wrapper.querySelector('.code-block-linenums')) return;
+        if (!wrapper || !wrapper.classList.contains('code-block-wrapper')) return;
+
+        // 兜底：若已存在上一轮构建的行号列则先移除，保证每次都从干净的 DOM 开始
+        const stale = wrapper.querySelector('.code-block-linenums');
+        if (stale) stale.remove();
 
         const lines = code.querySelectorAll('.code-block-extension-code-line');
         if (lines.length === 0) return;
@@ -211,9 +218,63 @@
             column.style.setProperty('--linenum-line-height', (lineHeightPx * lines.length) + 'px');
         }
 
-        // 标记：隐藏 code 内原有的 ::before 行号，并让 pre 让出左侧内边距给行号列
+        /*
+         * 标记：隐藏 code 内原有的 ::before 行号（has-linenums-col），
+         * 并让 pre 让出左侧内边距给行号列（has-linenums）。
+         * 这两个类同时作为「已构建」的判据，供 teardownLineNumbers 幂等移除。
+         */
         code.classList.add('has-linenums-col');
         preElement.classList.add('has-linenums');
+    }
+
+    /**
+     * 拆除行号列并还原被内联样式覆盖的几何，使其可被重新构建。
+     *
+     * 视口跨过响应式断点时，样式表会改变 pre 的内边距与字号，但行号列的关键
+     * 几何（字号、行高、上下内边距、分割线位置）都是构建时按像素内联写入的，
+     * 不会随样式表更新；而样式表对 pre 的内边距/字号又会覆盖构建值，二者叠加
+     * 会让行号与代码逐步脱开。这里把内联样式交还给样式表、并移除行号列，
+     * 再由 buildLineNumbers 按当前视口重新测量、重建。
+     */
+    function teardownLineNumbers(preElement) {
+        const code = preElement.querySelector('code');
+        const wrapper = preElement.parentElement;
+
+        // 移除行号列，分割线随列（::after 伪元素）一并消失
+        if (wrapper && wrapper.classList.contains('code-block-wrapper')) {
+            const column = wrapper.querySelector('.code-block-linenums');
+            if (column) column.remove();
+
+            wrapper.style.backgroundColor = '';
+            wrapper.style.border = '';
+        }
+
+        // 还原标记类：无 JS 回退行号复现；clear 后按样式表原值重新布局
+        if (code) {
+            code.classList.remove('has-linenums-col');
+            code.style.background = '';
+            code.style.width = '';
+            code.style.paddingLeft = '';
+        }
+
+        preElement.classList.remove('has-linenums');
+        preElement.style.background = '';
+        preElement.style.border = '';
+    }
+
+    /**
+     * 视口跨响应式断点时重排所有行号列。
+     *
+     * 行号列的对齐依赖构建时测得的几何，而断点会改变 pre 的字号与内边距；
+     * 此处对已构建的代码块先拆除内联覆盖、再按新视口重建。仅作用于标记为
+     * has-linenums 的 pre，避免触碰本就读不到行号的代码块。
+     */
+    function refreshLineNumberLayout() {
+        document.querySelectorAll('pre.has-linenums').forEach(function(preElement) {
+            if (!preElement.isConnected) return;
+            teardownLineNumbers(preElement);
+            buildLineNumbers(preElement);
+        });
     }
 
     /**
@@ -381,6 +442,22 @@
     } else {
         init();
         initObserver();
+    }
+
+    /*
+     * 视口跨过响应式断点时重排行号列。
+     * 用 matchMedia 而非 resize：断点值需与样式表的 @media (max-width: 640px)
+     * 保持一致，且只在真正跨越断点时触发一次，拖动窗口大小不会反复重排。
+     * addEventListener('change') 在旧内核可能缺失，故用 addListener 兜底。
+     */
+    const narrowViewport = window.matchMedia('(max-width: 640px)');
+    const onViewportBreakpointChange = function() {
+        refreshLineNumberLayout();
+    };
+    if (typeof narrowViewport.addEventListener === 'function') {
+        narrowViewport.addEventListener('change', onViewportBreakpointChange);
+    } else if (typeof narrowViewport.addListener === 'function') {
+        narrowViewport.addListener(onViewportBreakpointChange);
     }
 
     // 监听 Swup 页面切换事件
